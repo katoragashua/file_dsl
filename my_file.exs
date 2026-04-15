@@ -11,17 +11,22 @@ defmodule MyFile do
 
   defmacro __before_compile__(_env) do
     quote do
-      def run_file_actions(file_path) do
-        # Enum.each(@file_actions, fn {action, file_path} ->
-        #   apply(File, action, [file_path])
-        # end)
-        IO.inspect({@file_actions})
+      def run_file_actions(file_path, action) do
+        IO.inspect(@file_actions)
+          desired_action = Enum.find(@file_actions, nil, fn {action_name, _} -> action_name == action end)
+          IO.inspect(desired_action)
+
+          case desired_action do
+            {action_name, action_func} -> apply(__MODULE__, action_func, [file_path])
+            nil -> IO.puts("Action #{action} not found.")
+          end
+
       end
     end
   end
 
-  defmacro file_action(action_name, action) do
-    quote do: @file_actions {unquote(action_name), unquote(action)}
+  defmacro file_action(action_name, action_func) do
+    quote do: @file_actions {unquote(action_name), unquote(action_func)}
   end
 end
 
@@ -31,6 +36,7 @@ defmodule FileSystem do
 
   file_action :read, :read_file
   file_action :write, :write_file
+  file_action :append, :append_file
 
   def read_file (file_path) do
     IO.puts("Reading from #{file_path}")
