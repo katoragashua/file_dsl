@@ -1,11 +1,11 @@
 defmodule MyFileSystem do
-
   defmacro __using__(_options) do
     quote do
       import unquote(__MODULE__)
       Module.register_attribute(__MODULE__, :file_actions, accumulate: true)
 
-      @before_compile unquote(__MODULE__) # This will call the __before_compile__ macro before the module is compiled, allowing us to inject the handle_file function into the module that uses MyFile.
+      # This will call the __before_compile__ macro before the module is compiled, allowing us to inject the handle_file function into the module that uses MyFile.
+      @before_compile unquote(__MODULE__)
     end
   end
 
@@ -14,61 +14,78 @@ defmodule MyFileSystem do
     quote do
       def handle_file(file_path, flag, text \\ nil) do
         # IO.inspect(@file_actions)
-          desired_action = Enum.find(@file_actions, nil, fn {_, action_flag, _} -> flag == action_flag end)
+        desired_action =
+          Enum.find(@file_actions, nil, fn {_, action_flag, _} -> flag == action_flag end)
 
-          # Other ways to find the desired action:
-          #  desired_action = Enum.find_value(@file_actions, nil, fn {_, action_flag, action_func} -> if flag == action_flag, do: action_func, else: nil end)
-          # desired_action =
-          # Enum.find_value(@file_actions, fn {_, action_flag, action_func} ->
-          #   flag == action_flag && action_func
-          # end) || nil
+        # Other ways to find the desired action:
+        #  desired_action = Enum.find_value(@file_actions, nil, fn {_, action_flag, action_func} -> if flag == action_flag, do: action_func, else: nil end)
+        # desired_action =
+        # Enum.find_value(@file_actions, fn {_, action_flag, action_func} ->
+        #   flag == action_flag && action_func
+        # end) || nil
 
-          case desired_action do
-            {_action_name, _action_flag, action_func} -> apply(__MODULE__, action_func, [file_path, text])
-            nil -> {:error, "Invalid action flag: #{flag}"}
-          end
+        case desired_action do
+          # {_action_name, action_flag, action_func} when action_flag == :r or action_flag == :d -> apply(__MODULE__, action_func, [file_path])
+          {_action_name, action_flag, action_func} when action_flag in [:r, :d] ->
+            apply(__MODULE__, action_func, [file_path])
+
+          {_action_name, _action_flag, action_func} ->
+            # Read user input from the console if text is not provided
+            text =
+              if text == nil, do: IO.gets(:stdio, "Enter text: ") |> String.trim(), else: text
+
+            apply(__MODULE__, action_func, [file_path, text])
+
+          nil ->
+            {:error, "Invalid action flag: #{flag}"}
+        end
       end
     end
   end
 
   defmacro file_action(action_name, action_flag, action_func) do
-    quote do: @file_actions {unquote(action_name), unquote(action_flag), unquote(action_func)}
+    quote do: @file_actions({unquote(action_name), unquote(action_flag), unquote(action_func)})
   end
 end
 
-
 defmodule FileSystem do
-  use MyFile
+  use MyFileSystem
 
-  file_action :read, :r, :read_file
-  file_action :write, :w, :write_to_file
-  file_action :append, :a, :append_to_file
-  file_action :delete, :d, :delete_file
+  file_action(:read, :r, :read_file)
+  file_action(:write, :w, :write_to_file)
+  file_action(:append, :a, :append_to_file)
+  file_action(:delete, :d, :delete_file)
 
   # The read_file function will read the entire contents of the file and return it as a string. If the file does not exist or cannot be read, it will return an error message.
-  def read_file(file_path, _text) do
+  def read_file(file_path) do
     IO.puts("Reading from #{file_path}")
-   file_handle = File.open(file_path, [:read]) # Open the file in read mode
-   case file_handle do
-    {:ok, file} ->
-      content = IO.read(file, :eof) #
-      File.close(file)
-      content
-    {:error, reason} ->
-      handle_file_error(reason, file_path)
-   end
+    # Open the file in read mode
+    file_handle = File.open(file_path, [:read])
 
+    case file_handle do
+      {:ok, file} ->
+        #
+        content = IO.read(file, :eof)
+        File.close(file)
+        content
+
+      {:error, reason} ->
+        handle_file_error(reason, file_path)
+    end
   end
 
   # The write_to_file function will create the file if it doesn't exist, or overwrite it if it does.
   def write_to_file(file_path, text) do
     IO.puts("Writing to #{file_path}")
-    file_handle = File.open(file_path, [:write]) # This will create the file if it doesn't exist, or overwrite it if it does
+    # This will create the file if it doesn't exist, or overwrite it if it does
+    file_handle = File.open(file_path, [:write])
+
     case file_handle do
       {:ok, file} ->
         IO.write(file, "#{text}\n")
         File.close(file)
         :ok
+
       {:error, reason} ->
         handle_file_error(reason, file_path)
     end
@@ -77,20 +94,24 @@ defmodule FileSystem do
   # The append_to_file function will create the file if it doesn't exist, or append to it if it does.
   def append_to_file(file_path, text) do
     IO.puts("Appending to #{file_path}")
-    file_handle = File.open(file_path, [:append]) # Open the file in append mode
+    # Open the file in append mode
+    file_handle = File.open(file_path, [:append])
+
     case file_handle do
       {:ok, file} ->
         IO.write(file, "#{text}\n")
         File.close(file)
         :ok
+
       {:error, reason} ->
         handle_file_error(reason, file_path)
     end
   end
 
   # The delete_file function will attempt to delete the specified file. If the file does not exist or cannot be deleted, it will return an error message.
-  def delete_file(file_path, _text) do
+  def delete_file(file_path) do
     IO.puts("Deleting #{file_path}")
+
     case File.rm(file_path) do
       :ok -> :ok
       {:error, reason} -> handle_file_error(reason, file_path)
