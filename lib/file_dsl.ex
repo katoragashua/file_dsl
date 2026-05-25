@@ -1,5 +1,5 @@
 defmodule FileDSL do
-  defmacro __using__(_options) do
+  defmacro __using__(_options) do # This macro will be called when another module uses MyFileSystem, allowing us to inject the file handling functionality into that module.
     quote do
       import unquote(__MODULE__)
       Module.register_attribute(__MODULE__, :file_actions, accumulate: true)
